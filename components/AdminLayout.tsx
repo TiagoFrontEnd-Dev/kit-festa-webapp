@@ -37,10 +37,12 @@ export default function AdminLayout({ children }: Props) {
   }
 
   return (
-    <main className="flex min-h-screen bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+    <main className="flex min-h-screen flex-col bg-gray-100 text-gray-900 dark:bg-gray-950 dark:text-gray-100 md:flex-row">
       <AdminSidebar />
 
-      <section className="flex-1 p-6 md:p-10">{children}</section>
+      <section className="flex-1 p-4 md:p-10">
+        {children}
+      </section>
     </main>
   );
 }
