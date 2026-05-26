@@ -18,11 +18,7 @@ function formatarPreco(valor: number) {
 
 function montarMensagem(payload: AdminReservationNotification) {
   const itens =
-    payload.itens.length > 0
-      ? payload.itens
-          .map((item) => `- ${item.nome}: ${item.quantidade}x`)
-          .join("\n")
-      : "- Nenhum item vinculado";
+    payload.itens.length > 0 ? montarListaItens(payload) : "- Nenhum item vinculado";
 
   return [
     "Nova reserva recebida",
@@ -45,24 +41,111 @@ function montarMensagem(payload: AdminReservationNotification) {
   ].join("\n");
 }
 
+function montarListaItens(payload: AdminReservationNotification) {
+  return payload.itens
+    .map((item) => `- ${item.nome}: ${item.quantidade}x`)
+    .join("\n");
+}
+
 function normalizarTelefone(telefone?: string) {
   return telefone?.replace(/\D/g, "") || "";
 }
 
-export async function POST(request: Request) {
-  const payload = (await request.json()) as AdminReservationNotification;
-  const webhookUrl = process.env.WHATSAPP_WEBHOOK_URL;
-  const webhookToken = process.env.WHATSAPP_WEBHOOK_TOKEN;
-  const adminPhone = normalizarTelefone(process.env.WHATSAPP_ADMIN_PHONE);
+function montarTemplateMeta(payload: AdminReservationNotification) {
+  const templateName = process.env.META_WHATSAPP_TEMPLATE_NAME || "nova_reserva_admin";
+  const languageCode = process.env.META_WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR";
+  const itens = montarListaItens(payload) || "Nenhum item vinculado";
 
-  if (!webhookUrl) {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizarTelefone(process.env.WHATSAPP_ADMIN_PHONE),
+    type: "template",
+    template: {
+      name: templateName,
+      language: {
+        code: languageCode,
+      },
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: String(payload.reservaId) },
+            { type: "text", text: payload.kitNome },
+            { type: "text", text: formatarPreco(payload.kitPreco) },
+            { type: "text", text: formatarData(payload.dataEvento) },
+            { type: "text", text: payload.clienteNome },
+            { type: "text", text: payload.clienteTelefone },
+            { type: "text", text: payload.clienteEmail || "Nao informado" },
+            { type: "text", text: payload.observacoes || "Sem observacoes" },
+            { type: "text", text: itens },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function montarTextoMeta(payload: AdminReservationNotification) {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: normalizarTelefone(process.env.WHATSAPP_ADMIN_PHONE),
+    type: "text",
+    text: {
+      preview_url: false,
+      body: montarMensagem(payload),
+    },
+  };
+}
+
+async function enviarMetaCloudApi(payload: AdminReservationNotification) {
+  const accessToken = process.env.META_WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = process.env.META_WHATSAPP_API_VERSION || "v25.0";
+
+  if (!accessToken || !phoneNumberId) {
     return NextResponse.json({
       ok: false,
       configured: false,
       message:
-        "WHATSAPP_WEBHOOK_URL nao configurado. A reserva foi salva, mas a notificacao automatica nao foi enviada.",
+        "META_WHATSAPP_ACCESS_TOKEN e META_WHATSAPP_PHONE_NUMBER_ID nao configurados.",
     });
   }
+
+  const useTemplate = process.env.META_WHATSAPP_USE_TEMPLATE !== "false";
+  const body = useTemplate ? montarTemplateMeta(payload) : montarTextoMeta(payload);
+  const response = await fetch(
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  const result = await response.json().catch(() => null);
+
+  return NextResponse.json(
+    {
+      ok: response.ok,
+      configured: true,
+      provider: "meta",
+      status: response.status,
+      result,
+    },
+    { status: response.ok ? 200 : 502 }
+  );
+}
+
+async function enviarWebhookGenerico(payload: AdminReservationNotification) {
+  const webhookUrl = process.env.WHATSAPP_WEBHOOK_URL;
+  const webhookToken = process.env.WHATSAPP_WEBHOOK_TOKEN;
+  const adminPhone = normalizarTelefone(process.env.WHATSAPP_ADMIN_PHONE);
+
+  if (!webhookUrl) return null;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -82,11 +165,14 @@ export async function POST(request: Request) {
         reservation: payload,
       }),
     });
+    const result = await response.json().catch(() => null);
 
     return NextResponse.json({
       ok: response.ok,
       configured: true,
+      provider: "webhook",
       status: response.status,
+      result,
     });
   } catch (error) {
     return NextResponse.json(
@@ -101,4 +187,27 @@ export async function POST(request: Request) {
       { status: 502 }
     );
   }
+}
+
+export async function POST(request: Request) {
+  const payload = (await request.json()) as AdminReservationNotification;
+  const webhookResponse = await enviarWebhookGenerico(payload);
+
+  if (webhookResponse) {
+    return webhookResponse;
+  }
+
+  if (
+    process.env.META_WHATSAPP_ACCESS_TOKEN ||
+    process.env.META_WHATSAPP_PHONE_NUMBER_ID
+  ) {
+    return enviarMetaCloudApi(payload);
+  }
+
+  return NextResponse.json({
+    ok: false,
+    configured: false,
+    message:
+      "Nenhum provedor de WhatsApp configurado. Configure WHATSAPP_WEBHOOK_URL ou META_WHATSAPP_ACCESS_TOKEN + META_WHATSAPP_PHONE_NUMBER_ID.",
+  });
 }
