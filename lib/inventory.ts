@@ -64,26 +64,26 @@ export function calcularUsoPorItem(
     .filter((reserva) => ESTOQUE_STATUS_ATIVOS.includes(reserva.status))
     .filter((reserva) => reservaBloqueiaData(reserva.data_evento, dataEvento));
 
-  if (reservaItens.length > 0) {
-    const reservasPorId = new Map(
-      reservasAtivas.map((reserva) => [reserva.id, reserva])
+  const reservasPorId = new Map(
+    reservasAtivas.map((reserva) => [reserva.id, reserva])
+  );
+  const reservasComSnapshot = new Set<number>();
+
+  reservaItens.forEach((reservaItem) => {
+    if (!reservasPorId.has(reservaItem.reserva_id)) return;
+
+    reservasComSnapshot.add(reservaItem.reserva_id);
+
+    const usoAtual = usoPorItem.get(reservaItem.item_id) || 0;
+    usoPorItem.set(
+      reservaItem.item_id,
+      usoAtual + reservaItem.quantidade
     );
-
-    reservaItens.forEach((reservaItem) => {
-      if (!reservasPorId.has(reservaItem.reserva_id)) return;
-
-      const usoAtual = usoPorItem.get(reservaItem.item_id) || 0;
-      usoPorItem.set(
-        reservaItem.item_id,
-        usoAtual + reservaItem.quantidade
-      );
-    });
-
-    return usoPorItem;
-  }
+  });
 
   reservasAtivas
     .filter((reserva) => reserva.kit_id !== null)
+    .filter((reserva) => !reservasComSnapshot.has(reserva.id))
     .forEach((reserva) => {
       kitItens
         .filter((kitItem) => kitItem.kit_id === reserva.kit_id)
