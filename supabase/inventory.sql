@@ -91,3 +91,95 @@ to anon, authenticated;
 grant usage, select
 on all sequences in schema public
 to anon, authenticated;
+
+-- Permissoes extras: se o Supabase reativar RLS manualmente pela interface,
+-- estas policies continuam permitindo o uso pelo app atual.
+drop policy if exists "Permitir leitura estoque_itens" on public.estoque_itens;
+drop policy if exists "Permitir inserir estoque_itens" on public.estoque_itens;
+drop policy if exists "Permitir atualizar estoque_itens" on public.estoque_itens;
+drop policy if exists "Permitir deletar estoque_itens" on public.estoque_itens;
+
+create policy "Permitir leitura estoque_itens"
+on public.estoque_itens
+for select
+to anon, authenticated
+using (true);
+
+create policy "Permitir inserir estoque_itens"
+on public.estoque_itens
+for insert
+to anon, authenticated
+with check (true);
+
+create policy "Permitir atualizar estoque_itens"
+on public.estoque_itens
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+create policy "Permitir deletar estoque_itens"
+on public.estoque_itens
+for delete
+to anon, authenticated
+using (true);
+
+drop policy if exists "Permitir leitura kit_itens" on public.kit_itens;
+drop policy if exists "Permitir inserir kit_itens" on public.kit_itens;
+drop policy if exists "Permitir atualizar kit_itens" on public.kit_itens;
+drop policy if exists "Permitir deletar kit_itens" on public.kit_itens;
+
+create policy "Permitir leitura kit_itens"
+on public.kit_itens
+for select
+to anon, authenticated
+using (true);
+
+create policy "Permitir inserir kit_itens"
+on public.kit_itens
+for insert
+to anon, authenticated
+with check (true);
+
+create policy "Permitir atualizar kit_itens"
+on public.kit_itens
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+create policy "Permitir deletar kit_itens"
+on public.kit_itens
+for delete
+to anon, authenticated
+using (true);
+
+drop policy if exists "Permitir leitura reserva_itens" on public.reserva_itens;
+drop policy if exists "Permitir inserir reserva_itens" on public.reserva_itens;
+drop policy if exists "Permitir atualizar reserva_itens" on public.reserva_itens;
+drop policy if exists "Permitir deletar reserva_itens" on public.reserva_itens;
+
+create policy "Permitir leitura reserva_itens"
+on public.reserva_itens
+for select
+to anon, authenticated
+using (true);
+
+create policy "Permitir inserir reserva_itens"
+on public.reserva_itens
+for insert
+to anon, authenticated
+with check (true);
+
+create policy "Permitir atualizar reserva_itens"
+on public.reserva_itens
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+create policy "Permitir deletar reserva_itens"
+on public.reserva_itens
+for delete
+to anon, authenticated
+using (true);
