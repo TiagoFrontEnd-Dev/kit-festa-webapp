@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ClientNotice, { ClientNoticeType } from "@/components/client/ClientNotice";
+import { enviarNotificacaoAdmin } from "@/lib/adminNotification";
 import { salvarClienteReserva } from "@/lib/customers";
 import { supabase } from "@/lib/supabase";
 import {
@@ -148,6 +149,10 @@ export default function KitsPage() {
     return kitItens.filter((item) => item.kit_id === kitId);
   }
 
+  function buscarItemEstoque(itemId: number) {
+    return estoqueItens.find((item) => item.id === itemId);
+  }
+
   function abrirReserva(kit: Kit) {
     setKitSelecionado(kit);
     setClienteNome("");
@@ -283,6 +288,25 @@ export default function KitsPage() {
         );
         return;
       }
+    }
+
+    const notificacaoEnviada = await enviarNotificacaoAdmin({
+      reservaId: reservaCriada.id,
+      kitNome: kitSelecionado.nome,
+      kitPreco: kitSelecionado.preco,
+      dataEvento,
+      clienteNome: clienteNome.trim(),
+      clienteTelefone: clienteTelefone.trim(),
+      clienteEmail: clienteEmail.trim(),
+      observacoes: observacoes.trim(),
+      itens: buscarItensDoKit(kitSelecionado.id).map((item) => ({
+        nome: buscarItemEstoque(item.item_id)?.nome || "Item nao encontrado",
+        quantidade: item.quantidade,
+      })),
+    });
+
+    if (!notificacaoEnviada) {
+      console.warn("Reserva salva, mas a notificacao automatica nao foi enviada.");
     }
 
     setSalvando(false);

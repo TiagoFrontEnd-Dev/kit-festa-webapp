@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ClientNotice, { ClientNoticeType } from "@/components/client/ClientNotice";
+import { enviarNotificacaoAdmin } from "@/lib/adminNotification";
 import { salvarClienteReserva } from "@/lib/customers";
 import { supabase } from "@/lib/supabase";
 import {
@@ -339,6 +340,25 @@ export default function KitDetalhesPage() {
         );
         return;
       }
+    }
+
+    const notificacaoEnviada = await enviarNotificacaoAdmin({
+      reservaId: reservaCriada.id,
+      kitNome: kit.nome,
+      kitPreco: kit.preco,
+      dataEvento,
+      clienteNome: clienteNome.trim(),
+      clienteTelefone: clienteTelefone.trim(),
+      clienteEmail: clienteEmail.trim(),
+      observacoes: observacoes.trim(),
+      itens: buscarItensDoKit(kit.id).map((item) => ({
+        nome: buscarItemEstoque(item.item_id)?.nome || "Item nao encontrado",
+        quantidade: item.quantidade,
+      })),
+    });
+
+    if (!notificacaoEnviada) {
+      console.warn("Reserva salva, mas a notificacao automatica nao foi enviada.");
     }
 
     setSalvando(false);
