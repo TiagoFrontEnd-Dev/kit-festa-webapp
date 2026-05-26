@@ -4,8 +4,8 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
 export const metadata = {
-  title: "Kit Festa WebApp",
-  description: "Sistema para gestão de kits de festa",
+  title: "ArtePinte",
+  description: "Kits criativos e personalizados para festas inesquecíveis.",
 };
 
 export default function RootLayout({
@@ -17,7 +17,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className="bg-gray-100 text-gray-900 transition-colors duration-300 dark:bg-gray-950 dark:text-gray-100"
+        className="bg-rose-50 text-gray-900 transition-colors duration-300 dark:bg-gray-950 dark:text-rose-50"
       >
         <Navbar />
         {children}

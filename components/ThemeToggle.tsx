@@ -35,9 +35,9 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="rounded-xl bg-gray-200 px-4 py-2 font-bold text-gray-900 transition hover:bg-gray-300 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
+      className="rounded-2xl bg-rose-100 px-4 py-2 font-bold text-rose-700 transition hover:bg-rose-200 dark:bg-gray-800 dark:text-rose-200 dark:hover:bg-gray-700"
     >
-      {theme === "dark" ? "🌞 Claro" : "🌙 Escuro"}
+      {theme === "dark" ? "🌸 Claro" : "🌙 Escuro"}
     </button>
   );
 }

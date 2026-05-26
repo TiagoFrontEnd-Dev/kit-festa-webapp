@@ -1,9 +1,9 @@
 export default function Footer() {
   return (
-    <footer className="bg-gray-900 py-6 text-white dark:bg-black">
+    <footer className="border-t border-rose-100 bg-rose-50 py-8 text-gray-800 dark:border-rose-900/40 dark:bg-gray-950 dark:text-rose-100">
       <div className="mx-auto max-w-7xl px-6 text-center">
-        <p className="text-gray-200">
-          © 2026 Kit Festa WebApp - Todos os direitos reservados
+        <p className="font-medium">
+          © 2026 ArtePinte - Kits criativos para festas inesquecíveis.
         </p>
       </div>
     </footer>
