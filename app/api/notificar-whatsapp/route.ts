@@ -47,14 +47,60 @@ function montarListaItens(payload: AdminReservationNotification) {
     .join("\n");
 }
 
+function montarResumoTemplate(payload: AdminReservationNotification) {
+  const itens =
+    payload.itens.length > 0
+      ? payload.itens.map((item) => `${item.nome}: ${item.quantidade}x`).join("; ")
+      : "Nenhum item vinculado";
+
+  return [
+    `Reserva #${payload.reservaId}`,
+    `Kit: ${payload.kitNome}`,
+    `Valor: ${formatarPreco(payload.kitPreco)}`,
+    `Data: ${formatarData(payload.dataEvento)}`,
+    `Cliente: ${payload.clienteNome}`,
+    `WhatsApp: ${payload.clienteTelefone}`,
+    `E-mail: ${payload.clienteEmail || "Nao informado"}`,
+    `Observacoes: ${payload.observacoes || "Sem observacoes"}`,
+    `Itens: ${itens}`,
+  ].join("\n");
+}
+
 function normalizarTelefone(telefone?: string) {
   return telefone?.replace(/\D/g, "") || "";
 }
 
-function montarTemplateMeta(payload: AdminReservationNotification) {
-  const templateName = process.env.META_WHATSAPP_TEMPLATE_NAME || "nova_reserva_admin";
-  const languageCode = process.env.META_WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR";
+function montarParametrosTemplate(payload: AdminReservationNotification) {
+  const templateMode = process.env.META_WHATSAPP_TEMPLATE_MODE || "detailed";
+
+  if (templateMode === "summary") {
+    return [{ type: "text", text: montarResumoTemplate(payload) }];
+  }
+
   const itens = montarListaItens(payload) || "Nenhum item vinculado";
+
+  return [
+    { type: "text", text: String(payload.reservaId) },
+    { type: "text", text: payload.kitNome },
+    { type: "text", text: formatarPreco(payload.kitPreco) },
+    { type: "text", text: formatarData(payload.dataEvento) },
+    { type: "text", text: payload.clienteNome },
+    { type: "text", text: payload.clienteTelefone },
+    { type: "text", text: payload.clienteEmail || "Nao informado" },
+    { type: "text", text: payload.observacoes || "Sem observacoes" },
+    { type: "text", text: itens },
+  ];
+}
+
+function montarTemplateMeta(payload: AdminReservationNotification) {
+  const templateMode = process.env.META_WHATSAPP_TEMPLATE_MODE || "detailed";
+  const templateName =
+    templateMode === "summary" &&
+    (!process.env.META_WHATSAPP_TEMPLATE_NAME ||
+      process.env.META_WHATSAPP_TEMPLATE_NAME === "nova_reserva_admin")
+      ? "nova_reserva_admin_resumo"
+      : process.env.META_WHATSAPP_TEMPLATE_NAME || "nova_reserva_admin";
+  const languageCode = process.env.META_WHATSAPP_TEMPLATE_LANGUAGE || "pt_BR";
 
   return {
     messaging_product: "whatsapp",
@@ -69,17 +115,7 @@ function montarTemplateMeta(payload: AdminReservationNotification) {
       components: [
         {
           type: "body",
-          parameters: [
-            { type: "text", text: String(payload.reservaId) },
-            { type: "text", text: payload.kitNome },
-            { type: "text", text: formatarPreco(payload.kitPreco) },
-            { type: "text", text: formatarData(payload.dataEvento) },
-            { type: "text", text: payload.clienteNome },
-            { type: "text", text: payload.clienteTelefone },
-            { type: "text", text: payload.clienteEmail || "Nao informado" },
-            { type: "text", text: payload.observacoes || "Sem observacoes" },
-            { type: "text", text: itens },
-          ],
+          parameters: montarParametrosTemplate(payload),
         },
       ],
     },
