@@ -168,6 +168,12 @@ export default function AdminItensPage() {
 
   useEffect(() => {
     carregarDados();
+
+    const intervalo = window.setInterval(() => {
+      carregarDados();
+    }, 30000);
+
+    return () => window.clearInterval(intervalo);
   }, []);
 
   return (
@@ -176,10 +182,20 @@ export default function AdminItensPage() {
         Estoque de itens
       </h1>
 
-      <p className="mb-8 text-gray-700 dark:text-gray-300">
-        Cadastre cada item uma vez, informe o total disponivel e depois vincule
-        esse item aos kits na pagina de Kits.
-      </p>
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <p className="max-w-3xl text-gray-700 dark:text-gray-300">
+          Cadastre cada item uma vez, informe o total fisico e depois vincule
+          esse item aos kits na pagina de Kits.
+        </p>
+
+        <button
+          type="button"
+          onClick={carregarDados}
+          className="rounded-xl bg-gray-900 px-5 py-3 font-bold text-white dark:bg-white dark:text-gray-900"
+        >
+          Atualizar estoque
+        </button>
+      </div>
 
       <div className="mb-8 rounded-2xl bg-white p-6 shadow dark:bg-gray-900">
         <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
@@ -297,7 +313,7 @@ export default function AdminItensPage() {
 
                     <div className="grid gap-2 text-right">
                       <p className="text-sm text-gray-600 dark:text-gray-300">
-                        Total
+                        Total fisico
                       </p>
                       <p className="text-3xl font-bold text-gray-900 dark:text-white">
                         {resumo.total}
