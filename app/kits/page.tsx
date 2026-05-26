@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import ClientNotice, { ClientNoticeType } from "@/components/client/ClientNotice";
+import { salvarClienteReserva } from "@/lib/customers";
 import { supabase } from "@/lib/supabase";
 import {
   calcularDisponibilidadeKit,
@@ -20,7 +22,11 @@ type Kit = {
   ativo: boolean;
 };
 
-const WHATSAPP_ADMIN = "5531995983128";
+type NoticeState = {
+  title: string;
+  message: string;
+  type: ClientNoticeType;
+};
 
 function dataHojeLocal() {
   const hoje = new Date();
@@ -46,6 +52,11 @@ export default function KitsPage() {
   const [dataEvento, setDataEvento] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+
+  function mostrarAviso(title: string, message: string, type: ClientNoticeType = "info") {
+    setNotice({ title, message, type });
+  }
 
   async function carregarDados() {
     setLoading(true);
@@ -78,13 +89,15 @@ export default function KitsPage() {
     setLoading(false);
 
     if (kitsError) {
-      alert(`Erro ao carregar kits: ${kitsError.message}`);
+      mostrarAviso("Ops, algo saiu do lugar", `Nao conseguimos carregar os kits agora. ${kitsError.message}`, "error");
       return;
     }
 
     if (estoqueError || kitItensError || reservasError || reservaItensError) {
-      alert(
-        "Erro ao carregar estoque. Execute o SQL supabase/inventory.sql no Supabase antes de usar o controle de itens."
+      mostrarAviso(
+        "Estoque indisponivel",
+        "Nao conseguimos carregar o estoque neste momento. Tente novamente em instantes.",
+        "error"
       );
       return;
     }
@@ -111,10 +124,12 @@ export default function KitsPage() {
       .select("*");
 
     if (error || reservaItensError) {
-      alert(
-        `Erro ao carregar reservas ativas: ${
+      mostrarAviso(
+        "Nao foi possivel conferir a agenda",
+        `Tente novamente em instantes. ${
           error?.message || reservaItensError?.message
-        }`
+        }`,
+        "error"
       );
       return null;
     }
@@ -131,10 +146,6 @@ export default function KitsPage() {
 
   function buscarItensDoKit(kitId: number) {
     return kitItens.filter((item) => item.kit_id === kitId);
-  }
-
-  function buscarItemEstoque(itemId: number) {
-    return estoqueItens.find((item) => item.id === itemId);
   }
 
   function abrirReserva(kit: Kit) {
@@ -155,68 +166,15 @@ export default function KitsPage() {
     return new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
   }
 
-  function montarListaItensDoKit(kitId: number) {
-    const itensDoKit = buscarItensDoKit(kitId);
-
-    if (itensDoKit.length === 0) {
-      return "Nenhum item cadastrado para este kit.";
-    }
-
-    return itensDoKit
-      .map((item) => {
-        const itemEstoque = buscarItemEstoque(item.item_id);
-        return `- ${item.quantidade}x ${itemEstoque?.nome || "Item nao encontrado"}`;
-      })
-      .join("\n");
-  }
-
-  function abrirWhatsApp() {
-    if (!kitSelecionado) return;
-
-    const mensagem = `
-NOVA SOLICITACAO DE RESERVA
-
-Kit selecionado:
-${kitSelecionado.nome}
-
-Valor:
-R$ ${kitSelecionado.preco}
-
-Data do evento:
-${formatarData(dataEvento)}
-
-Itens inclusos no kit:
-${montarListaItensDoKit(kitSelecionado.id)}
-
-Dados do cliente
-
-Nome:
-${clienteNome}
-
-WhatsApp:
-${clienteTelefone}
-
-E-mail:
-${clienteEmail || "Nao informado"}
-
-Observacoes:
-${observacoes || "Nenhuma observacao."}
-
-Reserva enviada pelo sistema ArtePinte
-    `.trim();
-
-    const url = `https://wa.me/${WHATSAPP_ADMIN}?text=${encodeURIComponent(
-      mensagem
-    )}`;
-
-    window.open(url, "_blank");
-  }
-
   async function enviarReserva() {
     if (!kitSelecionado) return;
 
     if (!clienteNome.trim() || !clienteTelefone.trim() || !dataEvento) {
-      alert("Preencha nome, telefone e data do evento.");
+      mostrarAviso(
+        "So falta um pouquinho",
+        "Preencha seu nome, WhatsApp e a data do evento para continuarmos com carinho.",
+        "info"
+      );
       return;
     }
 
@@ -240,10 +198,34 @@ Reserva enviada pelo sistema ArtePinte
 
     if (!disponibilidade.disponivel) {
       setSalvando(false);
-      alert(
-        `Nao ha estoque suficiente para esta data: ${disponibilidade.faltantes
+      mostrarAviso(
+        "Essa data ficou apertadinha",
+        `Alguns itens nao estao disponiveis nessa data: ${disponibilidade.faltantes
           .map((item) => `${item.nome} (${item.disponivel}/${item.necessario})`)
-          .join(", ")}`
+          .join(", ")}. Escolha outra data para tentarmos te atender melhor.`,
+        "error"
+      );
+      return;
+    }
+
+    let clienteId: number;
+
+    try {
+      const cliente = await salvarClienteReserva({
+        nome: clienteNome,
+        telefone: clienteTelefone,
+        email: clienteEmail,
+      });
+
+      clienteId = cliente.id;
+    } catch (error) {
+      setSalvando(false);
+      mostrarAviso(
+        "Nao conseguimos salvar seus dados",
+        error instanceof Error
+          ? error.message
+          : "Tente novamente em instantes para seguirmos com sua reserva.",
+        "error"
       );
       return;
     }
@@ -251,6 +233,7 @@ Reserva enviada pelo sistema ArtePinte
     const { data: reservaCriada, error } = await supabase
       .from("reservas")
       .insert({
+        cliente_id: clienteId,
         kit_id: kitSelecionado.id,
         cliente_nome: clienteNome.trim(),
         cliente_telefone: clienteTelefone.trim(),
@@ -264,13 +247,17 @@ Reserva enviada pelo sistema ArtePinte
 
     if (error) {
       setSalvando(false);
-      alert(`Erro ao enviar reserva: ${error.message}`);
+      mostrarAviso("Nao conseguimos enviar sua reserva", error.message, "error");
       return;
     }
 
     if (!reservaCriada) {
       setSalvando(false);
-      alert("Erro ao criar reserva.");
+      mostrarAviso(
+        "Nao conseguimos criar sua reserva",
+        "Tente novamente em instantes para seguirmos com seu atendimento.",
+        "error"
+      );
       return;
     }
 
@@ -289,16 +276,23 @@ Reserva enviada pelo sistema ArtePinte
       if (erroItensReserva) {
         await supabase.from("reservas").delete().eq("id", reservaCriada.id);
         setSalvando(false);
-        alert(`Erro ao reservar itens do estoque: ${erroItensReserva.message}`);
+        mostrarAviso(
+          "Nao conseguimos separar os itens",
+          erroItensReserva.message,
+          "error"
+        );
         return;
       }
     }
 
     setSalvando(false);
-    abrirWhatsApp();
-    alert("Reserva enviada com sucesso! O WhatsApp sera aberto com a mensagem pronta.");
     fecharReserva();
     carregarReservasAtivas();
+    mostrarAviso(
+      "Recebemos sua reserva",
+      "Obrigada pelo carinho! Seus dados ja chegaram para o nosso atendimento e entraremos em contato em instantes para continuar tudo com voce.",
+      "success"
+    );
   }
 
   useEffect(() => {
@@ -513,10 +507,19 @@ Reserva enviada pelo sistema ArtePinte
               disabled={salvando || estoqueIndisponivel}
               className="mt-6 w-full rounded-xl bg-pink-600 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {salvando ? "Enviando..." : "Enviar reserva e abrir WhatsApp"}
+              {salvando ? "Enviando..." : "Enviar reserva"}
             </button>
           </div>
         </div>
+      )}
+
+      {notice && (
+        <ClientNotice
+          title={notice.title}
+          message={notice.message}
+          type={notice.type}
+          onClose={() => setNotice(null)}
+        />
       )}
     </main>
   );
