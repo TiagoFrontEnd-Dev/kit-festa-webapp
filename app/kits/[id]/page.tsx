@@ -4,6 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  calcularDisponibilidadeKit,
+  EstoqueItem,
+  KitItem,
+  ReservaItem,
+  ReservaEstoque,
+} from "@/lib/inventory";
 
 type Kit = {
   id: number;
@@ -11,15 +18,6 @@ type Kit = {
   descricao: string | null;
   preco: number;
   imagem: string | null;
-  ativo: boolean;
-};
-
-type Item = {
-  id: number;
-  kit_id: number | null;
-  nome: string;
-  quantidade: number;
-  descricao: string | null;
   ativo: boolean;
 };
 
@@ -34,6 +32,15 @@ type KitImagem = {
 
 const WHATSAPP_ADMIN = "5531995983128";
 
+function dataHojeLocal() {
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  const dia = String(hoje.getDate()).padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
+}
+
 export default function KitDetalhesPage() {
   const params = useParams();
 
@@ -41,7 +48,10 @@ export default function KitDetalhesPage() {
   const kitId = Number(idParam);
 
   const [kit, setKit] = useState<Kit | null>(null);
-  const [itens, setItens] = useState<Item[]>([]);
+  const [estoqueItens, setEstoqueItens] = useState<EstoqueItem[]>([]);
+  const [kitItens, setKitItens] = useState<KitItem[]>([]);
+  const [reservasAtivas, setReservasAtivas] = useState<ReservaEstoque[]>([]);
+  const [reservaItens, setReservaItens] = useState<ReservaItem[]>([]);
   const [imagens, setImagens] = useState<KitImagem[]>([]);
   const [imagemAtual, setImagemAtual] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -52,7 +62,6 @@ export default function KitDetalhesPage() {
   const [dataEvento, setDataEvento] = useState("");
   const [observacoes, setObservacoes] = useState("");
   const [salvando, setSalvando] = useState(false);
-  const [datasOcupadas, setDatasOcupadas] = useState<string[]>([]);
 
   async function carregarKit() {
     if (!kitId || Number.isNaN(kitId)) {
@@ -69,18 +78,30 @@ export default function KitDetalhesPage() {
       .eq("id", kitId)
       .maybeSingle();
 
-    const { data: itensData, error: itensError } = await supabase
-      .from("itens")
-      .select("*")
-      .eq("kit_id", kitId)
-      .eq("ativo", true)
-      .order("id", { ascending: true });
-
     const { data: imagensData, error: imagensError } = await supabase
       .from("kit_imagens")
       .select("*")
       .eq("kit_id", kitId)
       .order("ordem", { ascending: true });
+
+    const { data: estoqueData, error: estoqueError } = await supabase
+      .from("estoque_itens")
+      .select("*")
+      .eq("ativo", true)
+      .order("nome", { ascending: true });
+
+    const { data: kitItensData, error: kitItensError } = await supabase
+      .from("kit_itens")
+      .select("*");
+
+    const { data: reservasData, error: reservasError } = await supabase
+      .from("reservas")
+      .select("id, kit_id, data_evento, status")
+      .in("status", ["pendente", "confirmada"]);
+
+    const { data: reservaItensData, error: reservaItensError } = await supabase
+      .from("reserva_itens")
+      .select("*");
 
     setLoading(false);
 
@@ -89,13 +110,15 @@ export default function KitDetalhesPage() {
       return;
     }
 
-    if (itensError) {
-      alert(`Erro ao carregar itens: ${itensError.message}`);
+    if (imagensError) {
+      alert(`Erro ao carregar imagens: ${imagensError.message}`);
       return;
     }
 
-    if (imagensError) {
-      alert(`Erro ao carregar imagens: ${imagensError.message}`);
+    if (estoqueError || kitItensError || reservasError || reservaItensError) {
+      alert(
+        "Erro ao carregar estoque. Execute o SQL supabase/inventory.sql no Supabase antes de usar o controle de itens."
+      );
       return;
     }
 
@@ -105,9 +128,49 @@ export default function KitDetalhesPage() {
     }
 
     setKit(kitData);
-    setItens(itensData || []);
     setImagens(imagensData || []);
+    setEstoqueItens(estoqueData || []);
+    setKitItens(kitItensData || []);
+    setReservasAtivas(reservasData || []);
+    setReservaItens(reservaItensData || []);
     setImagemAtual(0);
+  }
+
+  async function carregarReservasAtivas() {
+    const { data, error } = await supabase
+      .from("reservas")
+      .select("id, kit_id, data_evento, status")
+      .in("status", ["pendente", "confirmada"]);
+
+    const { data: reservaItensData, error: reservaItensError } = await supabase
+      .from("reserva_itens")
+      .select("*");
+
+    if (error || reservaItensError) {
+      alert(
+        `Erro ao carregar reservas ativas: ${
+          error?.message || reservaItensError?.message
+        }`
+      );
+      return null;
+    }
+
+    const lista = data || [];
+    const listaItens = reservaItensData || [];
+    setReservasAtivas(lista);
+    setReservaItens(listaItens);
+    return {
+      reservas: lista,
+      reservaItens: listaItens,
+    };
+  }
+
+  function buscarItensDoKit(kitIdAtual: number) {
+    return kitItens.filter((item) => item.kit_id === kitIdAtual);
+  }
+
+  function buscarItemEstoque(itemId: number) {
+    return estoqueItens.find((item) => item.id === itemId);
   }
 
   function proximaImagem() {
@@ -126,20 +189,6 @@ export default function KitDetalhesPage() {
     );
   }
 
-  async function carregarDatasOcupadas() {
-    const { data, error } = await supabase
-      .from("reservas")
-      .select("data_evento")
-      .in("status", ["pendente", "confirmada"]);
-
-    if (error) {
-      alert(`Erro ao carregar datas ocupadas: ${error.message}`);
-      return;
-    }
-
-    setDatasOcupadas(data?.map((reserva) => reserva.data_evento) || []);
-  }
-
   function abrirReserva() {
     setModalReservaAberto(true);
     setClienteNome("");
@@ -147,28 +196,34 @@ export default function KitDetalhesPage() {
     setClienteEmail("");
     setDataEvento("");
     setObservacoes("");
-    carregarDatasOcupadas();
+    carregarReservasAtivas();
   }
 
   function fecharReserva() {
     setModalReservaAberto(false);
   }
 
-  function dataEstaOcupada(data: string) {
-    return datasOcupadas.includes(data);
-  }
-
   function formatarData(data: string) {
     return new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
   }
 
+  function montarListaItensDoKit(kitIdAtual: number) {
+    const itensDoKit = buscarItensDoKit(kitIdAtual);
+
+    if (itensDoKit.length === 0) {
+      return "Nenhum item cadastrado para este kit.";
+    }
+
+    return itensDoKit
+      .map((item) => {
+        const itemEstoque = buscarItemEstoque(item.item_id);
+        return `- ${item.quantidade}x ${itemEstoque?.nome || "Item nao encontrado"}`;
+      })
+      .join("\n");
+  }
+
   function abrirWhatsApp() {
     if (!kit) return;
-
-    const listaItens =
-      itens.length > 0
-        ? itens.map((item) => `- ${item.quantidade}x ${item.nome}`).join("\n")
-        : "Nenhum item cadastrado para este kit.";
 
     const mensagem = `
 NOVA SOLICITACAO DE RESERVA
@@ -183,7 +238,7 @@ Data do evento:
 ${formatarData(dataEvento)}
 
 Itens inclusos no kit:
-${listaItens}
+${montarListaItensDoKit(kit.id)}
 
 Dados do cliente
 
@@ -217,52 +272,85 @@ Reserva enviada pelo sistema ArtePinte
       return;
     }
 
-    if (dataEstaOcupada(dataEvento)) {
-      alert("Esta data ja esta ocupada. Escolha outra data.");
-      return;
-    }
-
     setSalvando(true);
 
-    const { data: reservasExistentes, error: erroBusca } = await supabase
+    const dadosAtualizados = await carregarReservasAtivas();
+
+    if (!dadosAtualizados) {
+      setSalvando(false);
+      return;
+    }
+
+    const disponibilidade = calcularDisponibilidadeKit(
+      kit.id,
+      dataEvento,
+      kitItens,
+      estoqueItens,
+      dadosAtualizados.reservas,
+      dadosAtualizados.reservaItens
+    );
+
+    if (!disponibilidade.disponivel) {
+      setSalvando(false);
+      alert(
+        `Nao ha estoque suficiente para esta data: ${disponibilidade.faltantes
+          .map((item) => `${item.nome} (${item.disponivel}/${item.necessario})`)
+          .join(", ")}`
+      );
+      return;
+    }
+
+    const { data: reservaCriada, error } = await supabase
       .from("reservas")
-      .select("id, status")
-      .eq("data_evento", dataEvento)
-      .in("status", ["pendente", "confirmada"]);
-
-    if (erroBusca) {
-      setSalvando(false);
-      alert(`Erro ao verificar disponibilidade: ${erroBusca.message}`);
-      return;
-    }
-
-    if (reservasExistentes && reservasExistentes.length > 0) {
-      setSalvando(false);
-      alert("Esta data ja possui uma reserva pendente ou confirmada.");
-      carregarDatasOcupadas();
-      return;
-    }
-
-    const { error } = await supabase.from("reservas").insert({
-      kit_id: kit.id,
-      cliente_nome: clienteNome.trim(),
-      cliente_telefone: clienteTelefone.trim(),
-      cliente_email: clienteEmail.trim(),
-      data_evento: dataEvento,
-      observacoes: observacoes.trim(),
-      status: "pendente",
-    });
-
-    setSalvando(false);
+      .insert({
+        kit_id: kit.id,
+        cliente_nome: clienteNome.trim(),
+        cliente_telefone: clienteTelefone.trim(),
+        cliente_email: clienteEmail.trim(),
+        data_evento: dataEvento,
+        observacoes: observacoes.trim(),
+        status: "pendente",
+      })
+      .select("id")
+      .single();
 
     if (error) {
+      setSalvando(false);
       alert(`Erro ao enviar reserva: ${error.message}`);
       return;
     }
 
+    if (!reservaCriada) {
+      setSalvando(false);
+      alert("Erro ao criar reserva.");
+      return;
+    }
+
+    const itensDaReserva = buscarItensDoKit(kit.id).map((item) => ({
+      reserva_id: reservaCriada.id,
+      kit_id: kit.id,
+      item_id: item.item_id,
+      quantidade: item.quantidade,
+    }));
+
+    if (itensDaReserva.length > 0) {
+      const { error: erroItensReserva } = await supabase
+        .from("reserva_itens")
+        .insert(itensDaReserva);
+
+      if (erroItensReserva) {
+        await supabase.from("reservas").delete().eq("id", reservaCriada.id);
+        setSalvando(false);
+        alert(`Erro ao reservar itens do estoque: ${erroItensReserva.message}`);
+        return;
+      }
+    }
+
+    setSalvando(false);
     abrirWhatsApp();
     alert("Reserva enviada com sucesso! O WhatsApp sera aberto com a mensagem pronta.");
     fecharReserva();
+    carregarReservasAtivas();
   }
 
   useEffect(() => {
@@ -271,8 +359,21 @@ Reserva enviada pelo sistema ArtePinte
 
   const imagemPrincipal =
     imagens.length > 0 ? imagens[imagemAtual].url : kit?.imagem || "";
-  const hoje = new Date().toISOString().split("T")[0];
-  const dataSelecionadaOcupada = dataEvento && dataEstaOcupada(dataEvento);
+  const hoje = dataHojeLocal();
+  const disponibilidadeSelecionada =
+    kit && dataEvento
+      ? calcularDisponibilidadeKit(
+          kit.id,
+          dataEvento,
+          kitItens,
+          estoqueItens,
+          reservasAtivas,
+          reservaItens
+        )
+      : null;
+  const estoqueIndisponivel =
+    Boolean(disponibilidadeSelecionada) &&
+    disponibilidadeSelecionada?.disponivel === false;
 
   if (loading) {
     return (
@@ -289,11 +390,11 @@ Reserva enviada pelo sistema ArtePinte
       <main className="min-h-screen bg-gray-100 px-6 py-16 text-gray-900 dark:bg-gray-950 dark:text-white">
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-8 text-center shadow dark:bg-gray-900">
           <h1 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white">
-            Kit não encontrado
+            Kit nao encontrado
           </h1>
 
           <p className="mb-6 text-gray-700 dark:text-gray-300">
-            Esse kit pode ter sido removido ou o link está incorreto.
+            Esse kit pode ter sido removido ou o link esta incorreto.
           </p>
 
           <Link href="/kits" className="font-bold text-pink-600">
@@ -328,7 +429,7 @@ Reserva enviada pelo sistema ArtePinte
                   onClick={imagemAnterior}
                   className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-black/70 px-4 py-3 font-bold text-white"
                 >
-                  ‹
+                  {"<"}
                 </button>
 
                 <button
@@ -336,7 +437,7 @@ Reserva enviada pelo sistema ArtePinte
                   onClick={proximaImagem}
                   className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-black/70 px-4 py-3 font-bold text-white"
                 >
-                  ›
+                  {">"}
                 </button>
 
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm font-bold text-white">
@@ -375,7 +476,7 @@ Reserva enviada pelo sistema ArtePinte
             href="/kits"
             className="mb-6 inline-block font-bold text-pink-600"
           >
-            ← Voltar para kits
+            Voltar para kits
           </Link>
 
           <h1 className="mb-4 text-4xl font-bold text-gray-900 dark:text-white">
@@ -383,7 +484,7 @@ Reserva enviada pelo sistema ArtePinte
           </h1>
 
           <p className="mb-6 text-lg leading-8 text-gray-700 dark:text-gray-300">
-            {kit.descricao || "Sem descrição."}
+            {kit.descricao || "Sem descricao."}
           </p>
 
           <p className="mb-8 text-4xl font-bold text-pink-600">
@@ -395,24 +496,28 @@ Reserva enviada pelo sistema ArtePinte
               Itens inclusos
             </h2>
 
-            {itens.length === 0 ? (
+            {buscarItensDoKit(kit.id).length === 0 ? (
               <p className="text-gray-700 dark:text-gray-300">
                 Nenhum item cadastrado para este kit.
               </p>
             ) : (
               <ul className="grid gap-3">
-                {itens.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between rounded-xl bg-white px-4 py-3 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                  >
-                    <span>{item.nome}</span>
+                {buscarItensDoKit(kit.id).map((item) => {
+                  const itemEstoque = buscarItemEstoque(item.item_id);
 
-                    <strong className="text-pink-600">
-                      {item.quantidade}x
-                    </strong>
-                  </li>
-                ))}
+                  return (
+                    <li
+                      key={item.id}
+                      className="flex items-center justify-between rounded-xl bg-white px-4 py-3 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                    >
+                      <span>{itemEstoque?.nome || "Item nao encontrado"}</span>
+
+                      <strong className="text-pink-600">
+                        {item.quantidade}x
+                      </strong>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -446,7 +551,8 @@ Reserva enviada pelo sistema ArtePinte
                 </h2>
 
                 <p className="mt-2 text-gray-700 dark:text-gray-300">
-                  Escolha uma data disponivel e preencha seus dados.
+                  Escolha uma data e confira se todos os itens do kit estao
+                  disponiveis.
                 </p>
               </div>
 
@@ -461,22 +567,31 @@ Reserva enviada pelo sistema ArtePinte
 
             <div className="mb-5 rounded-2xl bg-gray-100 p-4 dark:bg-gray-800">
               <h3 className="mb-3 font-bold text-gray-900 dark:text-white">
-                Datas ocupadas
+                Disponibilidade do estoque
               </h3>
 
-              {datasOcupadas.length === 0 ? (
-                <p className="text-sm text-green-600">
-                  Nenhuma data ocupada no momento.
+              {!dataEvento ? (
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  Selecione a data do evento para verificar o estoque.
+                </p>
+              ) : disponibilidadeSelecionada?.disponivel ? (
+                <p className="text-sm font-bold text-green-600">
+                  Estoque disponivel para este kit em {formatarData(dataEvento)}.
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {datasOcupadas.map((data) => (
-                    <span
-                      key={data}
-                      className="rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white"
+                <div className="grid gap-2">
+                  <p className="text-sm font-bold text-red-600">
+                    Estoque insuficiente para esta data.
+                  </p>
+
+                  {disponibilidadeSelecionada?.faltantes.map((item) => (
+                    <p
+                      key={item.itemId}
+                      className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700 dark:bg-red-950/40 dark:text-red-200"
                     >
-                      {formatarData(data)}
-                    </span>
+                      {item.nome}: disponivel {item.disponivel}, necessario{" "}
+                      {item.necessario}
+                    </p>
                   ))}
                 </div>
               )}
@@ -504,31 +619,17 @@ Reserva enviada pelo sistema ArtePinte
                 className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
               />
 
-              <div>
-                <input
-                  value={dataEvento}
-                  onChange={(e) => setDataEvento(e.target.value)}
-                  type="date"
-                  min={hoje}
-                  className={`w-full rounded-xl border px-4 py-3 text-gray-900 dark:bg-gray-800 dark:text-white ${
-                    dataSelecionadaOcupada
-                      ? "border-red-600 bg-red-50 dark:border-red-500"
-                      : "border-gray-300 bg-white dark:border-gray-700"
-                  }`}
-                />
-
-                {dataSelecionadaOcupada && (
-                  <p className="mt-2 font-bold text-red-600">
-                    Esta data esta ocupada. Escolha outra.
-                  </p>
-                )}
-
-                {dataEvento && !dataSelecionadaOcupada && (
-                  <p className="mt-2 font-bold text-green-600">
-                    Data disponivel.
-                  </p>
-                )}
-              </div>
+              <input
+                value={dataEvento}
+                onChange={(e) => setDataEvento(e.target.value)}
+                type="date"
+                min={hoje}
+                className={`w-full rounded-xl border px-4 py-3 text-gray-900 dark:bg-gray-800 dark:text-white ${
+                  estoqueIndisponivel
+                    ? "border-red-600 bg-red-50 dark:border-red-500"
+                    : "border-gray-300 bg-white dark:border-gray-700"
+                }`}
+              />
 
               <textarea
                 value={observacoes}
@@ -541,7 +642,7 @@ Reserva enviada pelo sistema ArtePinte
             <button
               type="button"
               onClick={enviarReserva}
-              disabled={salvando || Boolean(dataSelecionadaOcupada)}
+              disabled={salvando || estoqueIndisponivel}
               className="mt-6 w-full rounded-xl bg-pink-600 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {salvando ? "Enviando..." : "Enviar reserva e abrir WhatsApp"}

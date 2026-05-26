@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
+import { EstoqueItem, KitItem } from "@/lib/inventory";
 
 type Kit = {
   id: number;
@@ -25,16 +26,21 @@ type KitImagem = {
 export default function AdminKitsPage() {
   const [kits, setKits] = useState<Kit[]>([]);
   const [imagens, setImagens] = useState<KitImagem[]>([]);
+  const [estoqueItens, setEstoqueItens] = useState<EstoqueItem[]>([]);
+  const [kitItens, setKitItens] = useState<KitItem[]>([]);
 
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [preco, setPreco] = useState("");
+  const [itemSelecionadoId, setItemSelecionadoId] = useState("");
+  const [quantidadeItem, setQuantidadeItem] = useState("1");
 
   const [arquivosImagem, setArquivosImagem] = useState<File[]>([]);
   const [previewsImagem, setPreviewsImagem] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [editandoId, setEditandoId] = useState<number | null>(null);
+  const [salvandoItem, setSalvandoItem] = useState(false);
 
   async function carregarKits() {
     const { data: kitsData, error: kitsError } = await supabase
@@ -47,6 +53,16 @@ export default function AdminKitsPage() {
       .select("*")
       .order("ordem", { ascending: true });
 
+    const { data: estoqueData, error: estoqueError } = await supabase
+      .from("estoque_itens")
+      .select("*")
+      .eq("ativo", true)
+      .order("nome", { ascending: true });
+
+    const { data: kitItensData, error: kitItensError } = await supabase
+      .from("kit_itens")
+      .select("*");
+
     if (kitsError) {
       alert(`Erro ao carregar kits: ${kitsError.message}`);
       return;
@@ -57,12 +73,29 @@ export default function AdminKitsPage() {
       return;
     }
 
+    if (estoqueError || kitItensError) {
+      alert(
+        "Erro ao carregar itens de estoque. Confira se o SQL supabase/inventory.sql ja foi executado no Supabase."
+      );
+      return;
+    }
+
     setKits(kitsData || []);
     setImagens(imagensData || []);
+    setEstoqueItens(estoqueData || []);
+    setKitItens(kitItensData || []);
   }
 
   function buscarImagensDoKit(kitId: number) {
     return imagens.filter((imagem) => imagem.kit_id === kitId);
+  }
+
+  function buscarItensDoKit(kitId: number) {
+    return kitItens.filter((kitItem) => kitItem.kit_id === kitId);
+  }
+
+  function buscarItemEstoque(itemId: number) {
+    return estoqueItens.find((item) => item.id === itemId);
   }
 
   function selecionarImagens(files: FileList | null) {
@@ -126,7 +159,7 @@ export default function AdminKitsPage() {
 
         const imagensExistentes = buscarImagensDoKit(editandoId);
 
-        let imagemPrincipal =
+        const imagemPrincipal =
           imagensExistentes[0]?.url || imagensEnviadas[0]?.url || null;
 
         const { error: erroUpdate } = await supabase
@@ -244,6 +277,8 @@ export default function AdminKitsPage() {
     setPreco(String(kit.preco));
     setArquivosImagem([]);
     setPreviewsImagem([]);
+    setItemSelecionadoId("");
+    setQuantidadeItem("1");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -306,6 +341,63 @@ export default function AdminKitsPage() {
     carregarKits();
   }
 
+  async function salvarItemDoKit() {
+    if (!editandoId) {
+      alert("Edite ou cadastre um kit antes de vincular itens.");
+      return;
+    }
+
+    if (!itemSelecionadoId) {
+      alert("Selecione um item do estoque.");
+      return;
+    }
+
+    const quantidade = Number(quantidadeItem);
+
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      alert("Informe uma quantidade valida para o kit.");
+      return;
+    }
+
+    setSalvandoItem(true);
+
+    const { error } = await supabase.from("kit_itens").upsert(
+      {
+        kit_id: editandoId,
+        item_id: Number(itemSelecionadoId),
+        quantidade,
+      },
+      { onConflict: "kit_id,item_id" }
+    );
+
+    setSalvandoItem(false);
+
+    if (error) {
+      alert(`Erro ao vincular item: ${error.message}`);
+      return;
+    }
+
+    setItemSelecionadoId("");
+    setQuantidadeItem("1");
+    carregarKits();
+  }
+
+  async function removerItemDoKit(vinculoId: number) {
+    if (!confirm("Remover este item do kit?")) return;
+
+    const { error } = await supabase
+      .from("kit_itens")
+      .delete()
+      .eq("id", vinculoId);
+
+    if (error) {
+      alert(`Erro ao remover item do kit: ${error.message}`);
+      return;
+    }
+
+    carregarKits();
+  }
+
   function limparFormulario() {
     setEditandoId(null);
     setNome("");
@@ -313,6 +405,8 @@ export default function AdminKitsPage() {
     setPreco("");
     setArquivosImagem([]);
     setPreviewsImagem([]);
+    setItemSelecionadoId("");
+    setQuantidadeItem("1");
   }
 
   useEffect(() => {
@@ -409,6 +503,88 @@ export default function AdminKitsPage() {
             </button>
           )}
         </div>
+
+        {editandoId && (
+          <div className="mt-8 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-700 dark:bg-gray-800">
+            <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">
+              Itens deste kit
+            </h3>
+
+            <p className="mb-5 text-gray-700 dark:text-gray-300">
+              Vincule itens do estoque e informe quantas unidades este kit usa.
+            </p>
+
+            <div className="grid gap-4 md:grid-cols-[1fr_160px_auto]">
+              <select
+                value={itemSelecionadoId}
+                onChange={(e) => setItemSelecionadoId(e.target.value)}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              >
+                <option value="">Selecione um item do estoque</option>
+                {estoqueItens.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nome} - estoque: {item.quantidade_total}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                value={quantidadeItem}
+                onChange={(e) => setQuantidadeItem(e.target.value)}
+                type="number"
+                min="1"
+                placeholder="Qtd. no kit"
+                className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+              />
+
+              <button
+                type="button"
+                onClick={salvarItemDoKit}
+                disabled={salvandoItem}
+                className="rounded-xl bg-pink-600 px-5 py-3 font-bold text-white disabled:opacity-50"
+              >
+                {salvandoItem ? "Salvando..." : "Vincular"}
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3">
+              {buscarItensDoKit(editandoId).length === 0 ? (
+                <p className="text-gray-700 dark:text-gray-300">
+                  Nenhum item vinculado a este kit ainda.
+                </p>
+              ) : (
+                buscarItensDoKit(editandoId).map((vinculo) => {
+                  const item = buscarItemEstoque(vinculo.item_id);
+
+                  return (
+                    <div
+                      key={vinculo.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white p-4 dark:bg-gray-900"
+                    >
+                      <div>
+                        <p className="font-bold text-gray-900 dark:text-white">
+                          {item?.nome || "Item removido"}
+                        </p>
+
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          Usa {vinculo.quantidade} unidade(s) neste kit
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removerItemDoKit(vinculo.id)}
+                        className="rounded-xl bg-red-600 px-4 py-2 font-bold text-white"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl bg-white p-6 shadow dark:bg-gray-900">
@@ -424,6 +600,7 @@ export default function AdminKitsPage() {
           <div className="grid gap-6 md:grid-cols-3">
             {kits.map((kit) => {
               const imagensDoKit = buscarImagensDoKit(kit.id);
+              const itensDoKit = buscarItensDoKit(kit.id);
 
               return (
                 <div
@@ -483,6 +660,34 @@ export default function AdminKitsPage() {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="mb-2 font-bold text-gray-900 dark:text-white">
+                        Itens vinculados
+                      </p>
+
+                      {itensDoKit.length === 0 ? (
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          Nenhum item vinculado.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {itensDoKit.map((vinculo) => {
+                            const item = buscarItemEstoque(vinculo.item_id);
+
+                            return (
+                              <span
+                                key={vinculo.id}
+                                className="rounded-full bg-gray-100 px-3 py-1 text-xs font-bold text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                              >
+                                {vinculo.quantidade}x{" "}
+                                {item?.nome || "Item removido"}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
