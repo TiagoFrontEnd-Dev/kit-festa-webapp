@@ -45,7 +45,7 @@ export default function KitsPage() {
       .from("kits")
       .select("*")
       .eq("ativo", true)
-      .order("id", { ascending: false });
+      .order("nome", { ascending: true });
 
     const { data: itensData, error: itensError } = await supabase
       .from("itens")
@@ -65,7 +65,11 @@ export default function KitsPage() {
       return;
     }
 
-    setKits(kitsData || []);
+    const kitsOrdenados = [...(kitsData || [])].sort((a, b) =>
+      a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" })
+    );
+
+    setKits(kitsOrdenados);
     setItens(itensData || []);
   }
 
