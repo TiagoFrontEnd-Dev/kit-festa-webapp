@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { Cliente, normalizarTelefone } from "@/lib/customers";
 import { supabase } from "@/lib/supabase";
@@ -31,7 +31,7 @@ export default function AdminClientesPage() {
   const [busca, setBusca] = useState("");
   const [loading, setLoading] = useState(true);
 
-  async function carregarClientes() {
+  const carregarClientes = useCallback(async () => {
     setLoading(true);
 
     const { data: clientesData, error: clientesError } = await supabase
@@ -60,7 +60,7 @@ export default function AdminClientesPage() {
     setClientes(clientesData || []);
     setReservas(reservasData || []);
     setKits(kitsData || []);
-  }
+  }, []);
 
   function buscarKit(kitId: number | null) {
     return kits.find((kit) => kit.id === kitId);
@@ -116,8 +116,12 @@ export default function AdminClientesPage() {
   }, [busca, clientes]);
 
   useEffect(() => {
-    carregarClientes();
-  }, []);
+    const carregamento = window.setTimeout(() => {
+      void carregarClientes();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarClientes]);
 
   return (
     <AdminLayout>

@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import ClientNotice, { ClientNoticeType } from "@/components/client/ClientNotice";
 import { enviarNotificacaoAdmin } from "@/lib/adminNotification";
@@ -71,11 +72,15 @@ export default function KitDetalhesPage() {
   const [salvando, setSalvando] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
 
-  function mostrarAviso(title: string, message: string, type: ClientNoticeType = "info") {
+  const mostrarAviso = useCallback(function mostrarAviso(
+    title: string,
+    message: string,
+    type: ClientNoticeType = "info"
+  ) {
     setNotice({ title, message, type });
-  }
+  }, []);
 
-  async function carregarKit() {
+  const carregarKit = useCallback(async () => {
     if (!kitId || Number.isNaN(kitId)) {
       setLoading(false);
       setKit(null);
@@ -148,9 +153,9 @@ export default function KitDetalhesPage() {
     setReservasAtivas(reservasData || []);
     setReservaItens(reservaItensData || []);
     setImagemAtual(0);
-  }
+  }, [kitId, mostrarAviso]);
 
-  async function carregarReservasAtivas() {
+  const carregarReservasAtivas = useCallback(async () => {
     const { data, error } = await supabase
       .from("reservas")
       .select("id, kit_id, data_evento, status")
@@ -179,7 +184,7 @@ export default function KitDetalhesPage() {
       reservas: lista,
       reservaItens: listaItens,
     };
-  }
+  }, [mostrarAviso]);
 
   function buscarItensDoKit(kitIdAtual: number) {
     return kitItens.filter((item) => item.kit_id === kitIdAtual);
@@ -212,7 +217,7 @@ export default function KitDetalhesPage() {
     setClienteEmail("");
     setDataEvento("");
     setObservacoes("");
-    carregarReservasAtivas();
+    void carregarReservasAtivas();
   }
 
   function fecharReserva() {
@@ -363,7 +368,7 @@ export default function KitDetalhesPage() {
 
     setSalvando(false);
     fecharReserva();
-    carregarReservasAtivas();
+    void carregarReservasAtivas();
     mostrarAviso(
       "Recebemos sua reserva",
       "Obrigada pelo carinho! Seus dados ja chegaram para o nosso atendimento e entraremos em contato em instantes para continuar tudo com voce.",
@@ -372,8 +377,12 @@ export default function KitDetalhesPage() {
   }
 
   useEffect(() => {
-    carregarKit();
-  }, [kitId]);
+    const carregamento = window.setTimeout(() => {
+      void carregarKit();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarKit]);
 
   const imagemPrincipal =
     imagens.length > 0 ? imagens[imagemAtual].url : kit?.imagem || "";
@@ -427,12 +436,15 @@ export default function KitDetalhesPage() {
     <main className="min-h-screen bg-gray-100 px-6 py-16 text-gray-900 dark:bg-gray-950 dark:text-gray-100">
       <section className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-2">
         <div className="rounded-3xl bg-white p-4 shadow dark:bg-gray-900">
-          <div className="relative overflow-hidden rounded-2xl">
+          <div className="relative h-[420px] overflow-hidden rounded-2xl">
             {imagemPrincipal ? (
-              <img
+              <Image
                 src={imagemPrincipal}
                 alt={kit.nome}
-                className="h-[420px] w-full object-cover"
+                fill
+                unoptimized
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
               />
             ) : (
               <div className="flex h-[420px] items-center justify-center bg-gray-200 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -478,9 +490,12 @@ export default function KitDetalhesPage() {
                       : "border-transparent"
                   }`}
                 >
-                  <img
+                  <Image
                     src={imagem.url}
                     alt={`${kit.nome} ${index + 1}`}
+                    width={180}
+                    height={80}
+                    unoptimized
                     className="h-20 w-full object-cover"
                   />
                 </button>

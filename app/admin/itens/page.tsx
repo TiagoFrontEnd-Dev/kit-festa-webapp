@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
 import {
@@ -42,7 +42,7 @@ export default function AdminItensPage() {
 
   const hoje = dataHojeLocal();
 
-  async function carregarDados() {
+  const carregarDados = useCallback(async () => {
     setCarregando(true);
 
     const { data: itensData, error: itensError } = await supabase
@@ -88,7 +88,7 @@ export default function AdminItensPage() {
     setKitItens(kitItensData || []);
     setReservas(reservasData || []);
     setReservaItens(reservaItensData || []);
-  }
+  }, []);
 
   function buscarKit(id: number) {
     return kits.find((kit) => kit.id === id);
@@ -133,7 +133,7 @@ export default function AdminItensPage() {
 
     alert(editandoId ? "Item atualizado!" : "Item cadastrado!");
     limparFormulario();
-    carregarDados();
+    void carregarDados();
   }
 
   function editarItem(item: EstoqueItem) {
@@ -155,7 +155,7 @@ export default function AdminItensPage() {
       return;
     }
 
-    carregarDados();
+    void carregarDados();
   }
 
   function limparFormulario() {
@@ -167,14 +167,19 @@ export default function AdminItensPage() {
   }
 
   useEffect(() => {
-    carregarDados();
+    const carregamento = window.setTimeout(() => {
+      void carregarDados();
+    }, 0);
 
     const intervalo = window.setInterval(() => {
-      carregarDados();
+      void carregarDados();
     }, 30000);
 
-    return () => window.clearInterval(intervalo);
-  }, []);
+    return () => {
+      window.clearTimeout(carregamento);
+      window.clearInterval(intervalo);
+    };
+  }, [carregarDados]);
 
   return (
     <AdminLayout>

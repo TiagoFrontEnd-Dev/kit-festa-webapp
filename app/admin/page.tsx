@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import StatCard from "@/components/cards/StatCard";
 import { supabase } from "@/lib/supabase";
@@ -27,7 +27,7 @@ export default function AdminPage() {
   const [proximasReservas, setProximasReservas] = useState<Reserva[]>([]);
   const [kits, setKits] = useState<Kit[]>([]);
 
-  async function carregarDashboard() {
+  const carregarDashboard = useCallback(async () => {
     const { data: kitsData, error: kitsError } = await supabase
       .from("kits")
       .select("id, nome, preco");
@@ -76,7 +76,7 @@ export default function AdminPage() {
       .slice(0, 5);
 
     setProximasReservas(proximas);
-  }
+  }, []);
 
   function buscarKit(kitId: number | null) {
     return kits.find((kit) => kit.id === kitId);
@@ -87,8 +87,12 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    carregarDashboard();
-  }, []);
+    const carregamento = window.setTimeout(() => {
+      void carregarDashboard();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarDashboard]);
 
   return (
     <AdminLayout>

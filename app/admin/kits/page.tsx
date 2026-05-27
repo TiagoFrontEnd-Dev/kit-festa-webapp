@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
 import { EstoqueItem, KitItem } from "@/lib/inventory";
@@ -42,7 +43,7 @@ export default function AdminKitsPage() {
   const [editandoId, setEditandoId] = useState<number | null>(null);
   const [salvandoItem, setSalvandoItem] = useState(false);
 
-  async function carregarKits() {
+  const carregarKits = useCallback(async () => {
     const { data: kitsData, error: kitsError } = await supabase
       .from("kits")
       .select("*")
@@ -84,7 +85,7 @@ export default function AdminKitsPage() {
     setImagens(imagensData || []);
     setEstoqueItens(estoqueData || []);
     setKitItens(kitItensData || []);
-  }
+  }, []);
 
   function buscarImagensDoKit(kitId: number) {
     return imagens.filter((imagem) => imagem.kit_id === kitId);
@@ -258,7 +259,7 @@ export default function AdminKitsPage() {
       }
 
       limparFormulario();
-      carregarKits();
+      void carregarKits();
     } catch (error) {
       if (error instanceof Error) {
         alert(`Erro: ${error.message}`);
@@ -338,7 +339,7 @@ export default function AdminKitsPage() {
     }
 
     alert("Kit excluído com sucesso!");
-    carregarKits();
+    void carregarKits();
   }
 
   async function salvarItemDoKit() {
@@ -379,7 +380,7 @@ export default function AdminKitsPage() {
 
     setItemSelecionadoId("");
     setQuantidadeItem("1");
-    carregarKits();
+    void carregarKits();
   }
 
   async function removerItemDoKit(vinculoId: number) {
@@ -395,7 +396,7 @@ export default function AdminKitsPage() {
       return;
     }
 
-    carregarKits();
+    void carregarKits();
   }
 
   function limparFormulario() {
@@ -410,8 +411,12 @@ export default function AdminKitsPage() {
   }
 
   useEffect(() => {
-    carregarKits();
-  }, []);
+    const carregamento = window.setTimeout(() => {
+      void carregarKits();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarKits]);
 
   return (
     <AdminLayout>
@@ -467,12 +472,19 @@ export default function AdminKitsPage() {
             {previewsImagem.length > 0 && (
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 {previewsImagem.map((preview) => (
-                  <img
+                  <div
                     key={preview}
-                    src={preview}
-                    alt="Preview"
-                    className="h-40 w-full rounded-xl object-cover"
-                  />
+                    className="relative h-40 w-full overflow-hidden rounded-xl"
+                  >
+                    <Image
+                      src={preview}
+                      alt="Preview"
+                      fill
+                      unoptimized
+                      sizes="(min-width: 768px) 33vw, 100vw"
+                      className="object-cover"
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -608,11 +620,16 @@ export default function AdminKitsPage() {
                   className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
                 >
                   {kit.imagem ? (
-                    <img
-                      src={kit.imagem}
-                      alt={kit.nome}
-                      className="h-44 w-full object-cover"
-                    />
+                    <div className="relative h-44 w-full">
+                      <Image
+                        src={kit.imagem}
+                        alt={kit.nome}
+                        fill
+                        unoptimized
+                        sizes="(min-width: 768px) 33vw, 100vw"
+                        className="object-cover"
+                      />
+                    </div>
                   ) : (
                     <div className="flex h-44 items-center justify-center bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                       Sem imagem
@@ -644,11 +661,14 @@ export default function AdminKitsPage() {
                       ) : (
                         <div className="grid grid-cols-3 gap-2">
                           {imagensDoKit.map((imagem) => (
-                            <div key={imagem.id} className="relative">
-                              <img
+                            <div key={imagem.id} className="relative h-20">
+                              <Image
                                 src={imagem.url}
                                 alt={kit.nome}
-                                className="h-20 w-full rounded-lg object-cover"
+                                fill
+                                unoptimized
+                                sizes="120px"
+                                className="rounded-lg object-cover"
                               />
 
                               <button

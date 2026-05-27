@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useCallback, useEffect, useState } from "react";
 import ClientNotice, { ClientNoticeType } from "@/components/client/ClientNotice";
 import { enviarNotificacaoAdmin } from "@/lib/adminNotification";
 import { salvarClienteReserva } from "@/lib/customers";
@@ -55,11 +56,15 @@ export default function KitsPage() {
   const [salvando, setSalvando] = useState(false);
   const [notice, setNotice] = useState<NoticeState | null>(null);
 
-  function mostrarAviso(title: string, message: string, type: ClientNoticeType = "info") {
+  const mostrarAviso = useCallback(function mostrarAviso(
+    title: string,
+    message: string,
+    type: ClientNoticeType = "info"
+  ) {
     setNotice({ title, message, type });
-  }
+  }, []);
 
-  async function carregarDados() {
+  const carregarDados = useCallback(async () => {
     setLoading(true);
 
     const { data: kitsData, error: kitsError } = await supabase
@@ -112,9 +117,9 @@ export default function KitsPage() {
     setKitItens(kitItensData || []);
     setReservasAtivas(reservasData || []);
     setReservaItens(reservaItensData || []);
-  }
+  }, [mostrarAviso]);
 
-  async function carregarReservasAtivas() {
+  const carregarReservasAtivas = useCallback(async () => {
     const { data, error } = await supabase
       .from("reservas")
       .select("id, kit_id, data_evento, status")
@@ -143,7 +148,7 @@ export default function KitsPage() {
       reservas: lista,
       reservaItens: listaItens,
     };
-  }
+  }, [mostrarAviso]);
 
   function buscarItensDoKit(kitId: number) {
     return kitItens.filter((item) => item.kit_id === kitId);
@@ -160,7 +165,7 @@ export default function KitsPage() {
     setClienteEmail("");
     setDataEvento("");
     setObservacoes("");
-    carregarReservasAtivas();
+    void carregarReservasAtivas();
   }
 
   function fecharReserva() {
@@ -311,7 +316,7 @@ export default function KitsPage() {
 
     setSalvando(false);
     fecharReserva();
-    carregarReservasAtivas();
+    void carregarReservasAtivas();
     mostrarAviso(
       "Recebemos sua reserva",
       "Obrigada pelo carinho! Seus dados ja chegaram para o nosso atendimento e entraremos em contato em instantes para continuar tudo com voce.",
@@ -320,8 +325,12 @@ export default function KitsPage() {
   }
 
   useEffect(() => {
-    carregarDados();
-  }, []);
+    const carregamento = window.setTimeout(() => {
+      void carregarDados();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarDados]);
 
   const hoje = dataHojeLocal();
   const disponibilidadeSelecionada =
@@ -371,9 +380,12 @@ export default function KitsPage() {
               >
                 <div className="relative h-72 overflow-hidden">
                   {kit.imagem ? (
-                    <img
+                    <Image
                       src={kit.imagem}
                       alt={kit.nome}
+                      fill
+                      unoptimized
+                      sizes="(min-width: 1280px) 33vw, (min-width: 640px) 50vw, 100vw"
                       className="h-full w-full object-cover transition duration-500 hover:scale-105"
                     />
                   ) : (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import AdminLayout from "@/components/AdminLayout";
 import { supabase } from "@/lib/supabase";
 
@@ -27,7 +27,7 @@ export default function AdminReservasPage() {
   const [kits, setKits] = useState<Kit[]>([]);
   const [loading, setLoading] = useState(true);
 
-  async function carregarReservas() {
+  const carregarReservas = useCallback(async () => {
     setLoading(true);
 
     const { data: kitsData, error: kitsError } = await supabase
@@ -53,7 +53,7 @@ export default function AdminReservasPage() {
 
     setKits(kitsData || []);
     setReservas(reservasData || []);
-  }
+  }, []);
 
   function buscarKit(kitId: number | null) {
     return kits.find((kit) => kit.id === kitId);
@@ -70,7 +70,7 @@ export default function AdminReservasPage() {
       return;
     }
 
-    carregarReservas();
+    void carregarReservas();
   }
 
   async function excluirReserva(id: number) {
@@ -85,7 +85,7 @@ export default function AdminReservasPage() {
     }
 
     alert("Reserva excluída com sucesso!");
-    carregarReservas();
+    void carregarReservas();
   }
 
   function formatarData(data: string) {
@@ -100,8 +100,12 @@ export default function AdminReservasPage() {
   }
 
   useEffect(() => {
-    carregarReservas();
-  }, []);
+    const carregamento = window.setTimeout(() => {
+      void carregarReservas();
+    }, 0);
+
+    return () => window.clearTimeout(carregamento);
+  }, [carregarReservas]);
 
   return (
     <AdminLayout>

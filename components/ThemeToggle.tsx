@@ -6,15 +6,19 @@ export default function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme");
+    const frame = window.requestAnimationFrame(() => {
+      const savedTheme = localStorage.getItem("theme");
 
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      setTheme("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      setTheme("light");
-    }
+      if (savedTheme === "dark") {
+        document.documentElement.classList.add("dark");
+        setTheme("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+        setTheme("light");
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   function toggleTheme() {
